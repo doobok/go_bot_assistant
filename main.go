@@ -8,7 +8,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
+
+var update tgbotapi.Update
+var bot *tgbotapi.BotAPI
 
 func main() {
 	// Загружаем переменные окружения из файла .env
@@ -25,7 +29,7 @@ func main() {
 	fmt.Println("Режим DEBUG:", debug)
 
 	// Создаём новый объект бота
-	bot, err := tgbotapi.NewBotAPI(token)
+	bot, err = tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -46,7 +50,6 @@ func main() {
 
 	// Обработка запросов на Webhook
 	http.HandleFunc("/webhook/", func(w http.ResponseWriter, r *http.Request) {
-		var update tgbotapi.Update
 		// Используем json.NewDecoder для декодирования JSON в объект Update
 		decoder := json.NewDecoder(r.Body)
 		if err := decoder.Decode(&update); err != nil {
@@ -56,11 +59,17 @@ func main() {
 
 		// Обрабатываем обновления
 		if update.Message != nil {
-			log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Сообщение получено локально!")
-			_, err := bot.Send(msg)
-			if err != nil {
-				log.Println("Ошибка при отправке сообщения:", err)
+			log.Printf("[%s] id:%s %s", update.Message.From.UserName, strconv.Itoa(int(update.Message.From.ID)), update.Message.Text)
+
+			if update.Message.IsCommand() {
+				switch update.Message.Command() {
+				case "start":
+					sendMessage("Добро пожаловать!")
+				case "help":
+					sendMessage("Список команд: /start, /help")
+				default:
+					sendMessage("Неизвестная команда")
+				}
 			}
 		}
 	})
@@ -68,4 +77,16 @@ func main() {
 	// Запускаем HTTP сервер для обработки запросов на Webhook
 	log.Println("Listening on :" + port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+func sendMessage(message string) {
+	if bot == nil {
+		log.Println("Bot is not initialized")
+		return
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, message)
+	_, err := bot.Send(msg)
+	if err != nil {
+		log.Println("Ошибка при отправке сообщения:", err)
+	}
 }
